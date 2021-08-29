@@ -32,7 +32,10 @@ function youtube_playlist_previewer {
         echo "</div>" >> $FILENAME
 
 	echo '
+<center>
+<button id="random" onclick="player.loadVideoById(get_random_ytid(0))">Next random video</button><br>
 <div id="player"></div>
+<center>
 
 <script src="https://www.youtube.com/iframe_api"></script>
 
