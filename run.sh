@@ -33,7 +33,7 @@ function youtube_playlist_previewer {
 
 	echo '
 <center>
-<button id="random" onclick="player.loadVideoById(get_random_ytid(0))">Next random video</button><br>
+<button id="random" onclick="player.loadVideoById(get_random_ytid(0))">Next random video</button><br><br>
 <div id="player"></div>
 <center>
 
