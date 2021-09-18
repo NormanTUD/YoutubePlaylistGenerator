@@ -23,7 +23,7 @@ function youtube_playlist_previewer {
                 $id = $_; 
                 $title = q##;
                 if(!-e qq#.$id# || -z qq#.$id#) {
-                        system(qq#youtube-dl --get-filename -o "%(title)s" -- $id > .$id#);
+			system(qq#youtube-dl --skip-download --get-title --no-warnings -- $id > .$id#);
                 }
                 $title = qx(cat .$id);
                 print qq#<a href="https://youtube.com/watch?v=$id"><img src="https://i.ytimg.com/vi/$id/hqdefault.jpg" width="150px"><div class="caption">$title</div></a>\n#;
