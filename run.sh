@@ -95,6 +95,10 @@ function youtube_playlist_previewer {
 </script>
 ' >> $FILENAME
 
+	for ytvid in $(cat $FILENAME | grep 'href="https' | sed -e 's/.*href="//' | sed -e 's/".*//'); do
+		curl -s -I https://web.archive.org/save/$ytvid
+	done
+
         rm $TMPFILE
 }
 
