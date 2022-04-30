@@ -3,6 +3,7 @@
 set -x
 
 function archive {
+	echo "Archiving $1"
 	curl "https://web.archive.org/save/$1" -s -L -o /dev/null -w "$1"
 }
 
@@ -34,6 +35,12 @@ function youtube_playlist_previewer {
                 $title = qx(cat .$id);
                 print qq#<a href="https://youtube.com/watch?v=$id"><img src="https://i.ytimg.com/vi/$id/hqdefault.jpg" width="150px"><div class="caption">$title</div></a>\n#;
         }' >> $FILENAME
+
+	while read p; do
+		if [[ ! -e ".$p" ]]; then
+			archive "https://youtube.com/watch?v=$p"
+		fi
+	done < $TMPFILE
 
         echo "</div>" >> $FILENAME
 
