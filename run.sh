@@ -1,5 +1,11 @@
 #!/bin/bash
 
+set -x
+
+function archive {
+	curl "https://web.archive.org/save/$1" -s -L -o /dev/null -w "$1"
+}
+
 function youtube_playlist_previewer {
         PLAYLIST=$1
 
