@@ -1,10 +1,14 @@
 #!/bin/bash
 
-set -x
+
+while [[ -e "tmp_index.html" ]]; do
+        exit
+done
 
 function archive {
-	echo "Archiving $1"
-	curl "https://web.archive.org/save/$1" -s -L -o /dev/null -w "$1"
+        echo "Archiving $1"
+        curl "https://web.archive.org/save/https://www.youtube.com/watch?v=$1" -s -L -o /dev/null -w "https://www.youtube.com/watch?v=$1" 2>/dev/null >/dev/null
+        touch ".${1}_archived"
 }
 
 function youtube_playlist_previewer {
@@ -12,39 +16,102 @@ function youtube_playlist_previewer {
 
         TMPFILE=$RANDOM.txt
 
-        youtube-dl -j --flat-playlist $PLAYLIST | jq -r '.id' > $TMPFILE
+        yt-dlp --no-check-certificate -j --flat-playlist $PLAYLIST | jq -r '.id' | tac > $TMPFILE
 
-        FILENAME=index.html
+        FILENAME=tmp_index.html
 
-	echo "<head>" > $FILENAME
+        now=$(date)
+
+        echo "<!DOCTYPE html>" > $FILENAME
+        echo "<html>" >> $FILENAME
+        echo "<head>" >> $FILENAME
+        echo "<title>Playlist &mdash; $now</title>" >> $FILENAME
         echo "<style>#images{ text-align:center; margin:50px auto; }" >> $FILENAME
         echo "#images a{margin:0px 20px; display:inline-block; text-decoration:none; color:black; }" >> $FILENAME
-        echo ".caption { width: 150px; height: 80px; overflow-y: auto; }" >> $FILENAME
+        echo ".caption { width: 15vw; height: 10vh; overflow-y: auto; }" >> $FILENAME
+        echo "img { width: 15vw; overflow-y: auto; }" >> $FILENAME
         echo "</style>" >> $FILENAME
-	echo '<meta charset="UTF-8">' >> $FILENAME
-	echo "</head>" >> $FILENAME
+        echo '<meta charset="UTF-8">' >> $FILENAME
+        echo "</head>" >> $FILENAME
         echo '<div id="images">' >> $FILENAME
 
-        cat $TMPFILE  | perl -lne 'while (<>) { 
+        cat $TMPFILE | perl -lne 'while (<>) {
                 chomp; 
                 $id = $_; 
-                $title = q##;
-                if(!-e qq#.$id# || -z qq#.$id#) {
-			system(qq#youtube-dl --skip-download --get-title --no-warnings -- $id > .$id#);
+
+                use HTTP::Tiny;
+                my $Client = HTTP::Tiny->new();
+
+                my $url = "https://i.ytimg.com/vi/$id/hqdefault.jpg";
+                my $response = $Client->get($url);
+                my $status_code = $response->{status};
+
+                if($status_code == 200) {
+                        $title = q##;
+
+                        my $playable_in_embed;
+
+                        my $playable_in_embed_file = ".playable_in_embed_$id";
+                        my $playable_in_embed_file_is_too_old = (time - (stat $playable_in_embed_file)[9]) > (7*86400) && rand() >= 0.5;
+
+                        if(!-e $playable_in_embed_file || -z $playable_in_embed_file || $playable_in_embed_file_is_too_old) {
+                                warn "Downloading playable_in_embed for $id\n";
+                                system(qq#yt-dlp --print "%(playable_in_embed)s" -- $id > $playable_in_embed_file#);
+                        }
+
+                        $playable_in_embed = qx(cat $playable_in_embed_file);
+
+                        if($playable_in_embed !~ /True/) {
+                                # sicherheitshalber nochmal downloaden wenn es false ist
+                                warn "Downloading playable_in_embed for $id (again)\n";
+                                system(qq#yt-dlp --print "%(playable_in_embed)s" -- $id > $playable_in_embed_file#);
+                        }
+
+                        $playable_in_embed = qx(cat $playable_in_embed_file);
+
+                        if($playable_in_embed =~ /True/) {
+                                if(!-e qq#.full_$id# || -z qq#.full_$id#) {
+                                        warn "Downloading title for $id\n";
+                                        system(qq#yt-dlp --print "%(title)s<br><br><br>Channel: <b>%(channel)s</b> - %(duration>%H:%M:%S)s" -- $id > .full_$id#);
+                                }
+
+                                $title = qx(cat .full_$id);
+                                if($title) {
+                                        my $availability;
+
+                                        my $availability_file = ".availability_$id";
+                                        my $availability_file_is_too_old = (time - (stat $availability_file)[9]) > (7*86400) && rand() >= 0.5;
+
+                                        if(!-e $availability_file || -z $availability_file || $availability_file_is_too_old) {
+                                                warn "Downloading availability for $id\n";
+                                                system(qq#yt-dlp --print "%(availability)s" -- $id > $availability_file#);
+                                        }
+
+                                        $availability = qx(cat $availability_file);
+
+                                        if($availability =~ m#public#i || $availability =~ m#unlisted#i) {
+                                                print qq#<a href="https://youtube.com/watch?v=$id"><img src="https://i.ytimg.com/vi/$id/hqdefault.jpg"><div class="caption">$title</div></a>\n#;
+                                        } else {
+                                                warn qq#Availability for $id is >$availability<, not public or unlisted. Not listing\n#;
+                                        }
+                                }
+                        } else {
+                                warn qq#$id is not playable in embedded. Not listing it.\n#;
+                        }
+                } else {
+                        warn "$id is not available.\n";
                 }
-                $title = qx(cat .$id);
-                print qq#<a href="https://youtube.com/watch?v=$id"><img src="https://i.ytimg.com/vi/$id/hqdefault.jpg" width="150px"><div class="caption">$title</div></a>\n#;
         }' >> $FILENAME
 
-	while read p; do
-		if [[ ! -e ".$p" ]]; then
-			archive "https://youtube.com/watch?v=$p"
-		fi
-	done < $TMPFILE
+        while read p; do
+                if [[ ! -e ".${p}_archived" ]]; then
+                        archive "$p"
+                fi
+        done < $TMPFILE
 
         echo "</div>" >> $FILENAME
 
-	echo '
+        echo '
 <center>
 <button id="random" onclick="player.loadVideoById(get_random_ytid(0))">Next random video</button><br><br>
 <div id="player"></div>
@@ -68,7 +135,7 @@ function youtube_playlist_previewer {
                         youtube_ids.splice(index, 1);
                 } else {
                         if(recursion) {
-                                alert("Cannot get IDs");
+                                console.warn("Cannot get IDs");
                         } else {
                                 for(var i = 0; i < anchors.length; i++){
                                         youtube_ids.push(anchors[i].href.replace("https://youtube.com/watch?v=", ""));
@@ -107,10 +174,17 @@ function youtube_playlist_previewer {
         }
 </script>
 ' >> $FILENAME
+        echo "</html>" >> $FILENAME
 
-	for ytvid in $(cat $FILENAME | grep 'href="https' | sed -e 's/.*href="//' | sed -e 's/".*//'); do
-		curl -s -I https://web.archive.org/save/$ytvid
-	done
+        if [[ -e "index_old.html" ]]; then
+                rm index_old.html
+        fi
+
+        if [[ -e "index.html" ]]; then
+                mv index.html index_old.html
+        fi
+
+        mv $FILENAME index.html
 
         rm $TMPFILE
 }
